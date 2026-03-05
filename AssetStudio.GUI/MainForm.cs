@@ -1209,7 +1209,7 @@ namespace AssetStudio.GUI
                 return;
             }
 
-            var str = m_Shader.Convert();
+            var str = m_Shader.Convert(Studio.Game);
             PreviewText(str == null ? "Serialized Shader can't be read" : str.Replace("\n", "\r\n"));
         }
 

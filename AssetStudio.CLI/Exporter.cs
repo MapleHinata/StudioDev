@@ -68,7 +68,7 @@ namespace AssetStudio.CLI
             if (!TryExportFile(exportPath, item, ".shader", out var exportFullPath))
                 return false;
             var m_Shader = (Shader)item.Asset;
-            var str = m_Shader.Convert();
+            var str = m_Shader.Convert(Studio.Game);
             File.WriteAllText(exportFullPath, str);
             return true;
         }

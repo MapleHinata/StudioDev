@@ -285,7 +285,7 @@ namespace AssetStudio
             gpuProgramID = reader.ReadInt32();
             m_Tags = new SerializedTagMap(reader);
             m_LOD = reader.ReadInt32();
-            if (reader.Game.Type.IsLoveAndDeepspace())
+            if (reader.Game.Type.IsLoveAndDeepspace() || (reader.Game.Type.IsShiningNikki() && version[0] >= 2019))
             {
                 int numOverrideKeywordAndStage = reader.ReadInt32();
                 var m_OverrideKeywordAndStage = new List<KeyValuePair<string, uint>>();
@@ -608,7 +608,7 @@ namespace AssetStudio
         {
             var version = reader.version;
 
-            if (reader.Game.Type.IsLoveAndDeepspace())
+            if (reader.Game.Type.IsLoveAndDeepspace() || (reader.Game.Type.IsShiningNikki() && version[0] >= 2019))
             {
                 var m_CodeHash = new Hash128(reader);
             }
@@ -1026,6 +1026,12 @@ namespace AssetStudio
                 }
             }
 
+            if (reader.Game.Type.IsShiningNikki() && version[0] >= 2019)
+            {
+                var unknown = reader.ReadBoolean();
+                reader.AlignStream();
+            }
+
             m_DisableNoSubshadersMessage = reader.ReadBoolean();
             reader.AlignStream();
         }
@@ -1107,12 +1113,12 @@ namespace AssetStudio
                     }
                 }
 
-                if (reader.Game.Type.IsLoveAndDeepspace())
+                if (reader.Game.Type.IsLoveAndDeepspace() || (reader.Game.Type.IsShiningNikki() && version[0] >= 2019))
                 {
-                    var codeOffsets = reader.ReadUInt32ArrayArray();
-                    var codeCompressedLengths = reader.ReadUInt32ArrayArray();
-                    var codeDecompressedLengths = reader.ReadUInt32ArrayArray();
-                    var codeCompressedBlob = reader.ReadUInt8Array();
+                    offsets = reader.ReadUInt32ArrayArray();
+                    compressedLengths = reader.ReadUInt32ArrayArray();
+                    decompressedLengths = reader.ReadUInt32ArrayArray();
+                    compressedBlob = reader.ReadUInt8Array();
                     reader.AlignStream();
                 }
 

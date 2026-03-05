@@ -16,6 +16,12 @@ namespace AssetStudio
 
         public int[] version => assetsFile.version;
         public BuildType buildType => assetsFile.buildType;
+        
+        public long ActualPosition
+        {
+            get => BaseStream.Position - byteStart;
+            set => BaseStream.Position = value;
+        }
 
         public ObjectReader(EndianBinaryReader reader, SerializedFile assetsFile, ObjectInfo objectInfo, Game game) : base(reader.BaseStream, reader.Endian)
         {
