@@ -309,7 +309,9 @@ namespace AssetStudio
                     case GameType.TMSK:
                         reader = DecryptTMSK(reader);
                         break;
-
+                    case GameType.LoveAndProducer:
+                        reader = DecryptLoveAndProducer(reader);
+                        break;
                 }
             }
             if (reader.FileType == FileType.BundleFile && game.Type.IsBlockFile() || reader.FileType == FileType.ENCRFile || reader.FileType == FileType.BlbFile)

@@ -11,6 +11,11 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
+using Org.BouncyCastle.Crypto;
+using Org.BouncyCastle.Crypto.Engines;
+using Org.BouncyCastle.Crypto.Modes;
+using Org.BouncyCastle.Crypto.Paddings;
+using Org.BouncyCastle.Crypto.Parameters;
 using static AssetStudio.BundleFile;
 using static AssetStudio.Crypto;
 
@@ -1849,6 +1854,46 @@ namespace AssetStudio
             //File.WriteAllBytes("TMSK.bin", ms1.ToArray());
             return new FileReader(reader.FullPath, ms1);
 
+        }
+        public static FileReader DecryptLoveAndProducer(FileReader reader)
+        {
+            Logger.Verbose($"Attempting to decrypt file {reader.FileName} with Love and Producer encryption");
+
+            var signatureBytes = reader.ReadBytes(8);
+            var signature = Encoding.UTF8.GetString(signatureBytes[..7]);
+            if (signature != "UnityFS")
+            {
+                Logger.Verbose("Signature UnityFS not found, trying default encryption");
+                reader.Position = 0;
+                var defaultKey = Convert.FromHexString
+                    ("3361323332313764363636393136336333626431636331313139353530663161303236316538323433653164613131383039306532333064");
+                var data = reader.ReadBytes((int)reader.Remaining);
+                
+                var decryptedData = PaddedDecrypt(new ParametersWithIV(new KeyParameter(defaultKey), new byte[8]), 
+                    data);
+
+                Logger.Verbose("Decrypted Love and Producer file successfully !!");
+
+                var ms = new MemoryStream();
+                ms.Write(decryptedData, 0, decryptedData.Length);
+                ms.Position = 0;
+                return new FileReader(reader.FullPath, ms);
+            }
+            
+            reader.Position = 0;
+            return reader;
+            
+            static byte[] PaddedDecrypt(ICipherParameters keyParamWithIV, byte[] cipherTextData)
+            {
+                IBlockCipher symmetricBlockCipher = new BlowfishEngine();
+                IBlockCipherMode symmetricBlockMode = new CbcBlockCipher(symmetricBlockCipher);
+                IBlockCipherPadding padding = new Pkcs7Padding();
+                PaddedBufferedBlockCipher cbcCipher = new PaddedBufferedBlockCipher(symmetricBlockMode, padding);
+                cbcCipher.Init(false, keyParamWithIV);
+                byte[] plainTextData = new byte[cbcCipher.GetOutputSize(cipherTextData.Length)];
+                _ = cbcCipher.ProcessBytes(cipherTextData, 0, cipherTextData.Length, plainTextData, 0);
+                return plainTextData;
+            }
         }
 
     }
