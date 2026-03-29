@@ -1,0 +1,113 @@
+﻿/**********************************************************\
+|                                                          |
+| XXTEA.cs                                                 |
+|                                                          |
+| XXTEA encryption algorithm library for .NET.             |
+|                                                          |
+| Encryption Algorithm Authors:                            |
+|      David J. Wheeler                                    |
+|      Roger M. Needham                                    |
+|                                                          |
+| Code Author:  Ma Bingyao <mabingyao@gmail.com>           |
+| LastModified: Mar 10, 2015                               |
+|                                                          |
+\**********************************************************/
+
+using System;
+
+namespace AssetStudio;
+
+public static class XXTEA
+{
+    private const uint Delta = 0x9E3779B9;
+
+    private static uint Mx(uint sum, uint y, uint z, int p, uint e, uint[] k)
+    {
+        return (((z >> 5) ^ (y << 2)) + ((y >> 3) ^ (z << 4))) ^ ((sum ^ y) + (k[(p & 3) ^ e] ^ z));
+    }
+
+    public static byte[] Decrypt(byte[] data, byte[] key)
+    {
+        if (data.Length == 0) return data;
+
+        return ToByteArray(Decrypt(ToUInt32Array(data, false), ToUInt32Array(FixKey(key), false)), false);
+    }
+
+    private static uint[] Decrypt(uint[] v, uint[] k)
+    {
+        var n = v.Length - 1;
+        if (n < 1) return v;
+
+        uint z, y = v[0], sum, e;
+        int p, q = 6 + 52 / (n + 1);
+        unchecked
+        {
+            sum = (uint)(q * Delta);
+            while (sum != 0)
+            {
+                e = (sum >> 2) & 3;
+                for (p = n; p > 0; p--)
+                {
+                    z = v[p - 1];
+                    y = v[p] -= Mx(sum, y, z, p, e, k);
+                }
+
+                z = v[n];
+                y = v[0] -= Mx(sum, y, z, p, e, k);
+                sum -= Delta;
+            }
+        }
+
+        return v;
+    }
+
+    private static byte[] FixKey(byte[] key)
+    {
+        if (key.Length == 16) return key;
+        var fixedkey = new byte[16];
+        if (key.Length < 16)
+            key.CopyTo(fixedkey, 0);
+        else
+            Array.Copy(key, 0, fixedkey, 0, 16);
+
+        return fixedkey;
+    }
+
+    private static uint[] ToUInt32Array(byte[] data, bool includeLength)
+    {
+        var length = data.Length;
+        var n = (length & 3) == 0 ? length >> 2 : (length >> 2) + 1;
+        uint[] result;
+        if (includeLength)
+        {
+            result = new uint[n + 1];
+            result[n] = (uint)length;
+        }
+        else
+        {
+            result = new uint[n];
+        }
+
+        for (var i = 0; i < length; i++) result[i >> 2] |= (uint)data[i] << ((i & 3) << 3);
+
+        return result;
+    }
+
+    private static byte[] ToByteArray(uint[] data, bool includeLength)
+    {
+        var n = data.Length << 2;
+        if (includeLength)
+        {
+            var m = (int)data[^1];
+            n -= 4;
+            if (m < n - 3 || m > n) return null;
+
+            n = m;
+        }
+
+        var result = new byte[n];
+        for (var i = 0; i < n; i++) result[i] = (byte)(data[i >> 2] >> ((i & 3) << 3));
+
+        return result;
+    }
+}

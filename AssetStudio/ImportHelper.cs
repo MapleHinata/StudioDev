@@ -3,6 +3,7 @@ using SevenZip;
 using System;
 using System.Buffers.Binary;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Data;
 using System.Drawing;
 using System.IO;
@@ -11,6 +12,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
+using Newtonsoft.Json;
 using Org.BouncyCastle.Crypto;
 using Org.BouncyCastle.Crypto.Engines;
 using Org.BouncyCastle.Crypto.Modes;
@@ -1859,42 +1861,96 @@ namespace AssetStudio
         {
             Logger.Verbose($"Attempting to decrypt file {reader.FileName} with Love and Producer encryption");
 
+            //TODO(Maple): Consider making a separate repo for crowdsourcing dynamic keys and download them on demand.
+            const string keysFileName = "LoveAndProducer_DynamicKeys.json"; 
+            //Default key seems to be shared across all servers.
+            const string defaultKeyString = 
+                "3361323332313764363636393136336333626431636331313139353530663161303236316538323433653164613131383039306532333064";
             var signatureBytes = reader.ReadBytes(8);
             var signature = Encoding.UTF8.GetString(signatureBytes[..7]);
             if (signature != "UnityFS")
             {
-                Logger.Verbose("Signature UnityFS not found, trying default encryption");
-                reader.Position = 0;
-                var defaultKey = Convert.FromHexString
-                    ("3361323332313764363636393136336333626431636331313139353530663161303236316538323433653164613131383039306532333064");
-                var data = reader.ReadBytes((int)reader.Remaining);
-                
-                var decryptedData = PaddedDecrypt(new ParametersWithIV(new KeyParameter(defaultKey), new byte[8]), 
-                    data);
-
-                Logger.Verbose("Decrypted Love and Producer file successfully !!");
-
+                var str = File.ReadAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, keysFileName));
+                var keyset = JsonConvert.DeserializeObject<Dictionary<string, string>>(str);
                 var ms = new MemoryStream();
-                ms.Write(decryptedData, 0, decryptedData.Length);
+                var isFixedPath = IsFixedPath(reader.FullPath, out var fixedPath, out var fixedPathWithoutFile);
+
+                reader.Position = 0;
+                var data = reader.ReadBytes((int)reader.Remaining);
+                byte[] decryptedData;
+
+                if (isFixedPath && keyset.TryGetValue(fixedPath, out var dynamicKey) || keyset.TryGetValue(fixedPathWithoutFile, out dynamicKey))
+                {
+                    Logger.Info($"Keyset contains a dynamic key for {reader.FileName}, using XXTEA encryption");
+
+                    decryptedData = XXTEA.Decrypt(data, Encoding.UTF8.GetBytes(dynamicKey));
+                    
+                    ms.Write(decryptedData, 0, decryptedData.Length);
+                }
+                else
+                {
+                    if (!isFixedPath)
+                        Logger.Warning("The file path does not contain the game's original directory structure, skipping dynamic key search");
+                    Logger.Info("Signature UnityFS or dynamic key not found, trying default encryption");
+
+                    var defaultKey = Convert.FromHexString(defaultKeyString);
+                
+                    decryptedData = PaddedDecrypt(new ParametersWithIV(new KeyParameter(defaultKey), new byte[8]), 
+                        data);
+
+                    ms.Write(decryptedData, 0, decryptedData.Length);
+                }
+
+                signature = Encoding.UTF8.GetString(decryptedData[..7]);
+
+                if (signature != "UnityFS")
+                    Logger.Warning($"Decryption of {reader.FileName} does not contain the UnityFS signature, decryption probably failed, is the key correct?");
                 ms.Position = 0;
                 return new FileReader(reader.FullPath, ms);
             }
-            
+            Logger.Info("File contains an UnityFS signature, skipping decryption.");
+
             reader.Position = 0;
             return reader;
             
-            static byte[] PaddedDecrypt(ICipherParameters keyParamWithIV, byte[] cipherTextData)
+            static byte[] PaddedDecrypt(ICipherParameters keyParamWithIv, byte[] cipherTextData)
             {
                 IBlockCipher symmetricBlockCipher = new BlowfishEngine();
                 IBlockCipherMode symmetricBlockMode = new CbcBlockCipher(symmetricBlockCipher);
                 IBlockCipherPadding padding = new Pkcs7Padding();
                 PaddedBufferedBlockCipher cbcCipher = new PaddedBufferedBlockCipher(symmetricBlockMode, padding);
-                cbcCipher.Init(false, keyParamWithIV);
+                cbcCipher.Init(false, keyParamWithIv);
                 byte[] plainTextData = new byte[cbcCipher.GetOutputSize(cipherTextData.Length)];
                 _ = cbcCipher.ProcessBytes(cipherTextData, 0, cipherTextData.Length, plainTextData, 0);
                 return plainTextData;
             }
-        }
+            
+            static bool IsFixedPath(string path, out string fixedPath, out string fixedPathWithoutFile)
+            {
+                ReadOnlyCollection<string> baseFolders = new([
+                    "i6", 
+                    "common", 
+                    "lua"
+                ]);
+                
+                Logger.Verbose("Fixing path before checking...");
+                var dirs = path.Split(Path.DirectorySeparatorChar);
+                foreach (var baseFolder in baseFolders)
+                {
+                    if (!dirs.Contains(baseFolder)) continue;
+                    var idx = Array.IndexOf(dirs, baseFolder);
 
+                    Logger.Verbose($"Separator found at index {idx}");
+                    fixedPath = string.Join(Path.DirectorySeparatorChar, dirs[idx..]).Replace("\\", "/");
+                    fixedPathWithoutFile =  Path.GetDirectoryName(fixedPath)?.Replace("\\", "/");
+                    return true;
+                }
+
+                Logger.Verbose("Unknown path");
+                fixedPath = string.Empty;
+                fixedPathWithoutFile= string.Empty;
+                return false;
+            }
+        }
     }
 }
