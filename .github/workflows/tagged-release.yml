@@ -3,7 +3,7 @@ name: Tagged Release
 on:
   push:
     tags:
-      - "love-and-producer-v*"
+      - "v*"
     paths-ignore:
       - '**/LICENSE'
       - '**/build.yml'
