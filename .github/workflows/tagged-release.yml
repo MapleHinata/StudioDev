@@ -2,8 +2,8 @@ name: Build
 
 on:
   push:
-    branches:
-      - 'love-and-producer'
+    tags:
+      - "love-and-producer-v*"
     paths-ignore:
       - '**/LICENSE'
       - '**/build.yml'
@@ -27,10 +27,14 @@ jobs:
       - name: Build .Net8 CLI
         run: msbuild /t:AssetStudio_CLI:publish /p:Configuration=Release /p:TargetFramework=net8.0-windows /p:SelfContained=false /verbosity:minimal
 
-      - name: Upload .Net8 Artifact
-        uses: actions/upload-artifact@v4
+      - name: Create release zip
+        run: tar -C AssetStudio.GUI/bin/Release/net8.0-windows/publish -a -cvf net8.0-windows.zip *
+
+      - name: Create a Release
+        uses: "marvinpinto/action-automatic-releases@latest"
         with:
-          name: net8.0-${{ github.sha }}-${{matrix.runs-on}}
-          path: AssetStudio.GUI/bin/Release/net8.0-windows/publish
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          prerelease: false
+          files: net8.0-windows.zip
 
     
